@@ -11,7 +11,7 @@ mounted = JSON.parse(`mount --libxo json`)['mount']['mounted']
 tmpdir  = File.realpath(LSU_TMPDIR_PATH)
 
 paths = mounted
-  .find_all{|m| m['mounter'] == user && m['node'].start_with?(tmpdir)}
+  .find_all{|m| m['mounter'] == user && (m['node'] == tmpdir || m['node'].start_with?(tmpdir + '/'))}
   .map     {|m| m['node']}
   .sort
   .reverse

@@ -6,11 +6,18 @@ require_relative '.utils'
 
 PID_FILE = File.join(ENV['HOME'], '.steam/steam.pid')
 
-steam_pid = begin
-  File.read(PID_FILE).to_i
+pid_text = begin
+  File.read(PID_FILE).strip
 rescue Errno::ENOENT
   pwarn 'No pid file found'
   nil
+end
+
+processes = JSON.parse(`ps ww -o pid,ppid,state,command -U $(id -u) --libxo json`)['process-information']['process'] || []
+steam_pid = pid_text.to_i if pid_text && pid_text.match?(/\A[1-9]\d*\z/)
+if steam_pid
+  identity = JSON.parse(`ps -o pid,comm -U $(id -u) --libxo json`)['process-information']['process'] || []
+  steam_pid = nil unless identity.any? { |process| process['pid'].to_i == steam_pid && process['command'] == 'steam' }
 end
 
 if steam_pid
@@ -29,8 +36,6 @@ end
 
 leftovers = []
 leftovers << steam_pid if steam_pid
-
-processes = JSON.parse(`ps ww -o pid,ppid,state,command -U $(id -u) --libxo json`)['process-information']['process']
 
 while true
   k = 0
