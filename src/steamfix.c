@@ -63,15 +63,15 @@ int sigaction(int sig, const struct sigaction* restrict act, struct sigaction* r
 /* Let's rewrite a few commands as well... */
 
 // ubuntu12_32/reaper depends on unimplemented PR_SET_CHILD_SUBREAPER
-void purge_reaper(const char* command) {
+void purge_reaper(char* command) {
   char* reaper_str = strstr(command, "/reaper SteamLaunch");
   if (reaper_str != NULL) {
 
     char* e = strstr(reaper_str, "--");
-    assert(e != NULL);
+    if (e == NULL) return;
 
-    for (char* p = reaper_str; p >= command && *p != ' '; p--) {
-      *p = ' ';
+    for (char* p = reaper_str; p > command && p[-1] != ' '; ) {
+      *--p = ' ';
     }
 
     for (char* p = reaper_str; p <= e + 1; p++) {
@@ -90,12 +90,15 @@ char* modify_webhelper_command(const char* command) {
     //" --v=0"
   ;
 
-  int   buf_len = strlen(format_str) + strlen(command) + 1;
-  char* buf     = malloc(buf_len);
+  if (!strstr(command, "steamwebhelper.sh' ")) return NULL;
+
+  size_t buf_len = strlen(format_str) + strlen(command) + 1;
+  char* buf = malloc(buf_len);
+  if (!buf) return NULL;
 
   char* webhelper_path = strdup(command);
+  if (!webhelper_path) { free(buf); return NULL; }
   char* webhelper_args = strstr(webhelper_path, "steamwebhelper.sh' ") + sizeof("steamwebhelper.sh' ") - 1;
-  assert(webhelper_args[-2] == '\'');
   webhelper_args[-2] = '\0';
 
   snprintf(buf, buf_len, format_str, webhelper_path, webhelper_args);
@@ -114,11 +117,14 @@ int system(const char* command) {
     libc_system = dlsym(RTLD_NEXT, "system");
   }
 
+  if (command == NULL) return libc_system(NULL);
+
   /* such as xdg-open */
 
   if (strstr(command, XDG_OPEN_CMD)) {
 
     char* buf = strdup(command);
+    if (!buf) return -1;
 
     char* xdg_open_cmd = strstr(buf, XDG_OPEN_CMD);
     memset(xdg_open_cmd, ' ', sizeof(XDG_OPEN_CMD) - 1);
@@ -140,6 +146,7 @@ int system(const char* command) {
     if (!browser_env || strcmp(browser_env, "1") == 0) {
 
       char* buf = modify_webhelper_command(command);
+      if (!buf) return libc_system(command);
       fprintf(stderr, "[[%s]]\n", buf);
 
       int err = libc_system(buf);
@@ -152,9 +159,13 @@ int system(const char* command) {
     }
   }
 
-  purge_reaper(command);
-
-  return libc_system(command);
+  if (!strstr(command, "/reaper SteamLaunch")) return libc_system(command);
+  char* buf = strdup(command);
+  if (!buf) return -1;
+  purge_reaper(buf);
+  int result = libc_system(buf);
+  free(buf);
+  return result;
 }
 
 static int (*libc_execvp)(const char*, char* const []) = NULL;
@@ -165,11 +176,23 @@ int execvp(const char* path, char* const argv[]) {
     libc_execvp = dlsym(RTLD_NEXT, "execvp");
   }
 
-  for (int i = 0; argv[i] != NULL; i++) {
-    purge_reaper(argv[i]);
+  int count = 0;
+  while (argv[count]) count++;
+  char* copy[count + 1];
+  for (int i = 0; i < count; i++) {
+    copy[i] = strdup(argv[i]);
+    if (!copy[i]) {
+      while (i > 0) free(copy[--i]);
+      return -1;
+    }
+    purge_reaper(copy[i]);
   }
-
-  return libc_execvp(path, argv);
+  copy[count] = NULL;
+  int result = libc_execvp(path, copy);
+  int saved_errno = errno;
+  for (int i = 0; i < count; i++) free(copy[i]);
+  errno = saved_errno;
+  return result;
 }
 
 static int (*libc_execvpe)(const char* file, char* const argv[], char* const envp[]) = NULL;
@@ -180,11 +203,23 @@ int execvpe(const char* file, char* const argv[], char* const envp[]) {
     libc_execvpe = dlsym(RTLD_NEXT, "execvpe");
   }
 
-  for (int i = 0; argv[i] != NULL; i++) {
-    purge_reaper(argv[i]);
+  int count = 0;
+  while (argv[count]) count++;
+  char* copy[count + 1];
+  for (int i = 0; i < count; i++) {
+    copy[i] = strdup(argv[i]);
+    if (!copy[i]) {
+      while (i > 0) free(copy[--i]);
+      return -1;
+    }
+    purge_reaper(copy[i]);
   }
-
-  return libc_execvpe(file, argv, envp);
+  copy[count] = NULL;
+  int result = libc_execvpe(file, copy, envp);
+  int saved_errno = errno;
+  for (int i = 0; i < count; i++) free(copy[i]);
+  errno = saved_errno;
+  return result;
 }
 
 static int (*libc_execv)(const char*, char* const []) = NULL;
@@ -208,9 +243,14 @@ int execv(const char* file, char* const argv[]) {
 
     size_t argv_size_in_bytes = sizeof(char*) * (arg_count + 1);
     char** argv2 = malloc(argv_size_in_bytes);
+    if (!argv2) return -1;
     memcpy(argv2, argv, argv_size_in_bytes);
 
     argv2[webhelper_str_index] = modify_webhelper_command(argv[webhelper_str_index]);
+    if (!argv2[webhelper_str_index]) {
+      free(argv2);
+      return libc_execv(file, argv);
+    }
 
     for (int i = 0; argv2[i] != NULL; i++) {
       fprintf(stderr, "[[%s]]\n", argv2[i]);
@@ -370,7 +410,7 @@ static void* XOpenDisplayImpl(char* display_name) {
         if (displays[i] == NULL) {
           displays[i] = orig_XOpenDisplay(NULL);
         }
-        borrowed[i] = true;
+        borrowed[i] = displays[i] != NULL;
         if (pthread_mutex_unlock(&display_pool_mutex) != 0) {
           err(1, "pthread_mutex_unlock");
         }

@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 
 #include <assert.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -147,12 +148,9 @@ __attribute__((constructor))
 static void init_monitor_fd() {
 
   int inout[2];
-  {
-    int err = pipe(inout);
-    assert(err == 0);
+  if (pipe2(inout, O_CLOEXEC) == 0) {
+    monitor_fd = inout[0];
   }
-
-  monitor_fd = inout[1];
 }
 
 int udev_monitor_get_fd(struct udev_monitor* udev_monitor) {

@@ -19,16 +19,16 @@ extern char* __progname;
 __attribute__((constructor))
 static void redirect_wine_to_wine64(int argc, char** argv, char** env) {
 
-  if (getenv("PROTONFIX_REDIRECT") != NULL) {
-    exit(1);
-  }
+  bool redirected = getenv("PROTONFIX_REDIRECT") != NULL;
+  unsetenv("PROTONFIX_REDIRECT");
 
   if (strcmp(__progname, "wine") == 0) {
+    if (redirected) exit(1);
 
     char wine64_path[strlen(argv[0]) + 3];
     snprintf(wine64_path, sizeof(wine64_path), "%s64", argv[0]);
 
-    if (strcmp(argv[1], "steam") == 0) {
+    if (argc > 1 && strcmp(argv[1], "steam") == 0) {
       if (access("/compat/linux/bin/env", F_OK) == 0) {
         argv[0] = "/compat/linux/bin/env";
       } else {
@@ -61,6 +61,9 @@ static int (*libc_execvp)(const char*, char* const []) = NULL;
 
 __attribute__((constructor))
 static void init_libc_func_pointers() {
+#ifndef __i386__
+  unsetenv("PROTONFIX_REDIRECT");
+#endif
   libc_execv  = dlsym(RTLD_NEXT, "execv");
   libc_execvp = dlsym(RTLD_NEXT, "execvp");
 }
