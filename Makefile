@@ -1,8 +1,8 @@
-PORTNAME=	linuxulator-steam-utils-anydistro
+PORTNAME=	lsu
 DISTVERSION=	0.1
 CATEGORIES=	games
 
-MAINTAINER=	gurov@users.noreply.github.com
+MAINTAINER=	thuggerthugger1@duck.com
 COMMENT=	Steam launcher for a custom Linuxulator root
 WWW=		https://github.com/Gur0v/linuxulator-steam-utils-standalone
 
@@ -32,4 +32,8 @@ do-install:
 	${LN} -s ../steam-utils/bin/steam ${STAGEDIR}${PREFIX}/bin/steam
 	${LN} -s ../steam-utils/bin/lsu-wine-env ${STAGEDIR}${PREFIX}/bin/lsu-wine-env
 
-.include <bsd.port.mk>
+.include <bsd.port.pre.mk>
+.if ${OSVERSION} < 1501000
+IGNORE=		requires FreeBSD 15.1 or newer
+.endif
+.include <bsd.port.post.mk>

@@ -1,6 +1,9 @@
 .if !defined(OSVERSION)
 OSVERSION != awk '/^\#define[[:blank:]]__FreeBSD_version/ {print $$3}' < /usr/include/sys/param.h # from bsd.port.mk
 .endif
+.if ${OSVERSION} < 1501000
+.error FreeBSD 15.1 or newer is required
+.endif
 
 PROJECT = steam-utils
 
@@ -11,7 +14,7 @@ LINUXBASE ?= /compat/linux
 LINUX_CC  ?= ${LINUXBASE}/bin/cc
 
 CFLAGS = -B${LINUXBASE}/bin --sysroot=${LINUXBASE} -std=c99 \
- -Wall -Wextra -Wno-unused-parameter -D__FreeBSD_version=${OSVERSION} -O2
+ -Wall -Wextra -Wno-unused-parameter -O2
 
 LIBS  = lib32/steam/steamfix.so          \
         lib32/fakenm/libnm.so.0          \
@@ -49,7 +52,7 @@ $(BUILD_DIR)/lib$(b)/fakenm/libnm.so.0: src/fakenm.c
 	${LINUX_CC} -m$(b) $(CFLAGS) -fPIC -shared -o $(.TARGET) src/fakenm.c
 
 $(BUILD_DIR)/lib$(b)/fakenm/libnm-glib.so.4: $(BUILD_DIR)/lib$(b)/fakenm/libnm.so.0
-	ln -s libnm.so.0 $(.TARGET)
+	ln -sf libnm.so.0 $(.TARGET)
 
 $(BUILD_DIR)/lib$(b)/fakepulse/libpulse.so.0: src/fakepulse.c
 	mkdir -p $(BUILD_DIR)/lib$(b)/fakepulse
@@ -60,7 +63,7 @@ $(BUILD_DIR)/lib$(b)/fakeudev/libudev.so.0: src/fakeudev.c
 	${LINUX_CC} -m$(b) $(CFLAGS) -fPIC -shared -o $(.TARGET) src/fakeudev.c
 
 $(BUILD_DIR)/lib$(b)/fakeudev/libudev.so.1: $(BUILD_DIR)/lib$(b)/fakeudev/libudev.so.0
-	ln -s libudev.so.0 $(.TARGET)
+	ln -sf libudev.so.0 $(.TARGET)
 
 $(BUILD_DIR)/lib$(b)/dummy-uvm.so: src/dummy-uvm.c
 	mkdir -p $(BUILD_DIR)/lib$(b)
