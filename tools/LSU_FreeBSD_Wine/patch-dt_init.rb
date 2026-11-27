@@ -1,5 +1,7 @@
 #!/usr/bin/env ruby
 
+require 'open3'
+
 DT_INIT       = 12
 DT_FINI       = 13
 DT_INIT_ARRAY = 25
@@ -29,6 +31,7 @@ def read_dynamic_section(obj, section_offset, wordsize)
   i = 0
   while true
     pos = section_offset + wordsize * 2 * i
+    raise 'Truncated dynamic section' if pos + wordsize * 2 > obj.bytesize
     tag = to_number(obj[ pos            ...(pos + wordsize    )])
     val = to_number(obj[(pos + wordsize)...(pos + wordsize * 2)])
 
@@ -52,13 +55,15 @@ end
 
 def patch_init(path, out_path)
 
-  headers = `readelf --headers --wide "#{path}"`
+  headers, status = Open3.capture2('readelf', '--headers', '--wide', File.expand_path(path))
+  raise "readelf failed for #{path}" unless status.success?
 
-  headers =~ /Class:\s+(ELF32|ELF64)/
-  wordsize = $1 == 'ELF64' ? 8 : 4
-
-  headers =~ /.dynamic\s+DYNAMIC\s+\w+\s(\w+)/
-  dynamic_section_offset = $1.to_i(16)
+  elf_class = headers.match(/Class:\s+(ELF32|ELF64)/)
+  dynamic_section = headers.match(/\.dynamic\s+DYNAMIC\s+\h+\s+(\h+)/)
+  raise 'Missing ELF class or dynamic section' unless elf_class && dynamic_section
+  raise 'Unsupported ELF byte order' unless headers.match?(/Data:\s+2's complement, little endian/)
+  wordsize = elf_class[1] == 'ELF64' ? 8 : 4
+  dynamic_section_offset = dynamic_section[1].to_i(16)
 
   obj = IO.binread(path)
 
@@ -72,4 +77,5 @@ def patch_init(path, out_path)
   IO.binwrite(out_path, obj)
 end
 
+abort "Usage: #{$0} INPUT OUTPUT" unless ARGV.length == 2
 patch_init(ARGV[0], ARGV[1])

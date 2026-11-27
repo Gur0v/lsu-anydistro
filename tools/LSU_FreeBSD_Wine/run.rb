@@ -2,6 +2,7 @@
 # encoding: UTF-8
 
 require 'fileutils'
+require 'open3'
 require_relative '../../bin/.utils'
 
 KNOWN_VERSIONS = {
@@ -41,7 +42,9 @@ if !File.exist?(wine64_bin)
   exit(1)
 end
 
-PROTON_VERSION = `#{wine64_bin} --version`.chomp.delete_prefix("wine-")
+version_output, version_status = Open3.capture2(wine64_bin, '--version')
+abort "Failed to get version from #{wine64_bin}" unless version_status.success?
+PROTON_VERSION = version_output.chomp.delete_prefix("wine-")
 if !KNOWN_VERSIONS[PROTON_VERSION]
   perr "Found #{wine64_bin} version #{PROTON_VERSION}, expected#{KNOWN_VERSIONS.keys.size > 1 ? ':' : ''} #{KNOWN_VERSIONS.keys.join(', ')}."
   exit(1)
@@ -62,7 +65,9 @@ if PROTON_VERSION.to_i < 10 || (ENV['PROTON_USE_WOW64'] != '1' && PROTON_VERSION
     exit(1)
   end
 
-  wine32_version = `#{wine32_bin} --version`.chomp.delete_prefix("wine-")
+  version_output, version_status = Open3.capture2(wine32_bin, '--version')
+  abort "Failed to get version from #{wine32_bin}" unless version_status.success?
+  wine32_version = version_output.chomp.delete_prefix("wine-")
   if PROTON_VERSION != wine32_version
     perr "#{wine64_bin} (#{PROTON_VERSION}) and #{wine32_bin} (#{wine32_version}) versions must match each other."
     exit(1)
