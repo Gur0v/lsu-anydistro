@@ -8,6 +8,7 @@ SLR_DIR = 'SteamLinuxRuntime_sniper'
 
 case ARGV[0]
   when 'waitforexitandrun'
+    system(File.expand_path('../../bin/lsu-mount-runtime', __dir__), SLR_DIR) || raise('Unable to prepare chroot dir')
     mroot = File.join(LSU_TMPDIR_PATH, File.basename(SLR_DIR))
 
     FileUtils.mkdir_p(File.join(mroot, 'usr/steam-runtime/pinned_libs_64/'))

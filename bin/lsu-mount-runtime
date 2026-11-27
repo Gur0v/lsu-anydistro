@@ -47,6 +47,9 @@ if LSU_MESA_LIBS == 'ubuntu'
   download_debs(DPKGS, LSU_DIST_PATH)
 end
 
+FileUtils.mkdir_p(File.dirname(LSU_TMPDIR_PATH))
+lock = File.open(File.join(File.dirname(LSU_TMPDIR_PATH), '.lsu-mount-runtime.lock'), File::RDWR | File::CREAT, 0600)
+lock.flock(File::LOCK_EX)
 init_tmp_dir()
 mroot = File.join(LSU_TMPDIR_PATH, SLR_DIR)
 FileUtils.mkdir_p(mroot)
@@ -427,13 +430,14 @@ if try_mount('tmpfs', 'tmpfs', mroot, 'nocover')
         end
       end
     end
-  rescue
+  rescue Exception
     for path in mounts.reverse
       system('umount', '-f', path)
     end
     raise
   end
 else
+  raise "Runtime mount is not ready: #{mroot}; unmount it and retry" unless File.file?(File.join(mroot, '.lsu-setup-done'))
   pwarn "Assuming #{mroot} is already set up"
 end
 
@@ -458,3 +462,4 @@ for dir in dirs.sort
     mirror_mounts(mroot, dir)
   end
 end
+File.write(File.join(mroot, '.lsu-setup-done'), '')
