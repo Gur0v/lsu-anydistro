@@ -80,6 +80,14 @@ def get_linux_cmd_output(*args)
   end
 end
 
+FileUtils.mkdir_p(File.join(ENV.fetch('HOME'), '.steam'))
+steam_launch_lock = File.open(File.join(ENV.fetch('HOME'), '.steam', '.lsu-launch.lock'), File::RDWR | File::CREAT, 0600)
+steam_launch_lock.close_on_exec = true
+unless steam_launch_lock.flock(File::LOCK_EX | File::LOCK_NB)
+  warn 'Steam is already running or starting; leaving its web cache untouched.'
+  exit 1
+end
+
 requirements = check_requirements()
 if !requirements.empty?
   perr 'Please, make sure the following requirements are satisfied:'
@@ -134,6 +142,14 @@ if !File.exist?(STEAM_ROOT_PATH)
   exit 1
 end
 
+require 'json'
+processes = JSON.parse(IO.popen(['ps', '-ww', '-U', Process.uid.to_s, '-o', 'pid,state,command', '--libxo', 'json'], &:read)).fetch('process-information').fetch('process', [])
+if processes.any? { |p| !p.fetch('state', '').start_with?('Z') && p.fetch('command', '').match?(%r{(?:^|/)(?:steam|steamwebhelper)(?:\s|$)}) }
+  perr 'Steam is already running; leaving its web cache untouched.'
+  exit 1
+end
+FileUtils.rm_rf(File.join(STEAM_ROOT_PATH, 'config', 'htmlcache'))
+
 STEAM_RUNTIME_ROOT_PATH = File.join(STEAM_ROOT_PATH, 'ubuntu12_32/steam-runtime')
 
 if !File.exist?(STEAM_RUNTIME_ROOT_PATH)
@@ -176,6 +192,7 @@ client_library_path = [
   File.join(EMUL_PATH, '/usr/lib64/nss'),
   File.join(STEAM_ROOT_PATH, 'ubuntu12_32'),
   File.join(STEAM_ROOT_PATH, 'ubuntu12_32/panorama'),
+  File.join(STEAM_RUNTIME_ROOT_PATH, 'pinned_libs_32'),
   steam_runtime_lib_path
 ].join(':')
 

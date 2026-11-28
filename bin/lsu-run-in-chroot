@@ -49,4 +49,4 @@ end
 
 exec(*wrapper, 'chroot', '-n', mroot,
   File.join(LSU_IN_CHROOT, 'bin/lsu-freebsd-to-linux-env'),
-    '/bin/sh', '-c', 'cd "$1" && shift 1 && "$@"', '-', ENV['PWD'], *ARGV[1..-1])
+    '/bin/sh', '-c', 'cd "$1" && shift 1 && "$@"', '-', ENV['PWD'] || Dir.pwd, *ARGV[1..-1])
